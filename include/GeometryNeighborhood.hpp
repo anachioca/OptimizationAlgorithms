@@ -24,32 +24,33 @@ public:
                     PackingSolution neighbor = current;
                     Rectangle rect = neighbor.boxes[b1].rectangles[rIdx];
                     
-                    // Remove from b1
+                    // 1. Remove from b1
                     neighbor.boxes[b1].rectangles.erase(neighbor.boxes[b1].rectangles.begin() + rIdx);
                     
-                    // If b1 is now empty, remove it
+                    // 2. If b1 is now empty, remove it and adjust b2
+                    int adjustedB2 = b2;
                     if (neighbor.boxes[b1].rectangles.empty()) {
                         neighbor.boxes.erase(neighbor.boxes.begin() + b1);
-                        // Adjust b2 index if it was after b1
-                        return std::make_unique<PackingSolution>(std::move(neighbor));
+                        if (b2 > b1) adjustedB2--;
                     }
 
-                    // Try placing in b2 (normal and rotated)
+                    // 3. Try placing in b2 (normal and rotated)
                     bool placed = false;
-                    rect.rotated = false;
-                    if (neighbor.boxes[b2].addRectangle(rect)) {
-                        placed = true;
-                    } else {
-                        rect.rotated = true;
-                        if (neighbor.boxes[b2].addRectangle(rect)) {
+                    if (adjustedB2 >= 0 && adjustedB2 < (int)neighbor.boxes.size()) {
+                        rect.rotated = false;
+                        if (neighbor.boxes[adjustedB2].addRectangle(rect)) {
                             placed = true;
+                        } else {
+                            rect.rotated = true;
+                            if (neighbor.boxes[adjustedB2].addRectangle(rect)) {
+                                placed = true;
+                            }
                         }
                     }
 
-                    if (placed) {
-                        if (neighbor.objectiveValue() < currentObj) {
-                            return std::make_unique<PackingSolution>(std::move(neighbor));
-                        }
+                    // 4. Only return if the rectangle actually exists in the new solution
+                    if (placed && neighbor.objectiveValue() < currentObj) {
+                        return std::make_unique<PackingSolution>(std::move(neighbor));
                     }
                 }
             }
@@ -70,14 +71,14 @@ public:
     std::unique_ptr<PackingSolution> findBetterNeighbor(const PackingSolution& current) override {
         double currentObj = current.objectiveValue();
         int numBoxes = static_cast<int>(current.boxes.size());
-        if (numBoxes < 2) return nullptr;
+        if (numBoxes == 0) return nullptr;
 
         std::uniform_int_distribution<> boxDis(0, numBoxes - 1);
         
         int attempts = 500; 
         for (int k = 0; k < attempts; ++k) {
             int b1 = boxDis(gen);
-            if (current.boxes[b1].rectangles.empty()) continue;
+            if (b1 >= (int)current.boxes.size() || current.boxes[b1].rectangles.empty()) continue;
 
             std::uniform_int_distribution<> rectDis(0, current.boxes[b1].rectangles.size() - 1);
             int rIdx = rectDis(gen);
@@ -87,21 +88,32 @@ public:
 
             PackingSolution neighbor = current;
             Rectangle rect = neighbor.boxes[b1].rectangles[rIdx];
+            
+            // 1. Remove from b1
             neighbor.boxes[b1].rectangles.erase(neighbor.boxes[b1].rectangles.begin() + rIdx);
-
+            
+            // 2. If b1 is now empty, remove it and adjust b2
+            int adjustedB2 = b2;
             if (neighbor.boxes[b1].rectangles.empty()) {
                 neighbor.boxes.erase(neighbor.boxes.begin() + b1);
-                return std::make_unique<PackingSolution>(std::move(neighbor));
+                if (b2 > b1) adjustedB2--;
             }
 
+            // 3. Try placing in adjustedB2 (normal and rotated)
             bool placed = false;
-            rect.rotated = false;
-            if (neighbor.boxes[b2].addRectangle(rect)) placed = true;
-            else {
-                rect.rotated = true;
-                if (neighbor.boxes[b2].addRectangle(rect)) placed = true;
+            if (adjustedB2 >= 0 && adjustedB2 < (int)neighbor.boxes.size()) {
+                rect.rotated = false;
+                if (neighbor.boxes[adjustedB2].addRectangle(rect)) {
+                    placed = true;
+                } else {
+                    rect.rotated = true;
+                    if (neighbor.boxes[adjustedB2].addRectangle(rect)) {
+                        placed = true;
+                    }
+                }
             }
 
+            // 4. Only return if placed and better
             if (placed && neighbor.objectiveValue() < currentObj) {
                 return std::make_unique<PackingSolution>(std::move(neighbor));
             }

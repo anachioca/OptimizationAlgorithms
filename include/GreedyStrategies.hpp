@@ -31,9 +31,29 @@ public:
     }
 };
 
+/**
+ * Strategy to create a decidedly bad start solution.
+ */
+class BadStartingStrategy : public SelectionStrategy<Rectangle> {
+public:
+    void sort(std::vector<Rectangle>& elements) override {
+        // Just leave them in their original order
+    }
+};
+
 // Helper placement function for Greedy
 inline void placePacking(PackingSolution& sol, Rectangle rect) {
     sol.placeRectangle(rect);
+}
+
+// Decidedly bad placement: every rectangle gets its own box
+inline void placeOnePerBox(PackingSolution& sol, Rectangle rect) {
+    Box newBox(sol.L);
+    rect.x = 0;
+    rect.y = 0;
+    rect.rotated = false;
+    newBox.addRectangle(rect);
+    sol.boxes.push_back(newBox);
 }
 
 #endif // GREEDY_STRATEGIES_HPP

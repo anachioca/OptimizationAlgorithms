@@ -41,7 +41,11 @@ int main() {
     genBtn->onClick = [&]() {
         activeGeomLS.reset(); activePermLS.reset();
         rects = InstanceGenerator::generate(numRects, minW, maxW, minH, maxH);
-        currentSol = std::make_shared<PackingSolution>(boxSize);
+        
+        // Use bad start even for the "New" display to show the raw rectangles
+        auto badStart = std::make_unique<PackingSolution>(boxSize);
+        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(badStart), placeOnePerBox);
+        currentSol = badGreedy.solve();
     };
     buttons.push_back(std::move(genBtn));
 
@@ -56,8 +60,7 @@ int main() {
     auto lsRuleBtn = std::make_unique<Button>("Run LS (Swap)", sf::Vector2f(20, 450), sf::Vector2f(210, 40), font);
     lsRuleBtn->onClick = [&]() {
         activeGeomLS.reset();
-        std::vector<Rectangle> badPerm = rects;
-        SmallestFirstStrategy().sort(badPerm);
+        std::vector<Rectangle> badPerm = rects; // Original unsorted order
         auto startSol = std::make_unique<PermutationSolution>(badPerm, boxSize);
         activePermLS = std::make_unique<LocalSearch<PermutationSolution>>(std::move(startSol), std::make_unique<RandomizedSwapNeighborhood>());
     };
@@ -67,8 +70,9 @@ int main() {
     lsGeomBtn->onClick = [&]() {
         activePermLS.reset();
         auto emptySol = std::make_unique<PackingSolution>(boxSize);
-        GreedyAlgorithm<Rectangle, PackingSolution> greedy(rects, std::make_unique<SmallestFirstStrategy>(), std::move(emptySol), placePacking);
-        activeGeomLS = std::make_unique<LocalSearch<PackingSolution>>(greedy.solve(), std::make_unique<RandomizedGeometryNeighborhood>());
+        // Start from decidedly bad start: one rectangle per box
+        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(emptySol), placeOnePerBox);
+        activeGeomLS = std::make_unique<LocalSearch<PackingSolution>>(badGreedy.solve(), std::make_unique<RandomizedGeometryNeighborhood>());
     };
     buttons.push_back(std::move(lsGeomBtn));
 

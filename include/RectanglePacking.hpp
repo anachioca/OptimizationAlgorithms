@@ -22,7 +22,7 @@ struct Rectangle {
     int area() const { return width * height; }
 };
 
-class Box { // A class that manages rectangles within an L*L area and checks for overlaps.
+class Box {
 public:
     int L;
     std::vector<Rectangle> rectangles;
@@ -76,8 +76,6 @@ public:
     }
 
     bool addRectangle(Rectangle rect, double maxOverlapPercent = 0.0) {
-        // Corner-Point Heuristic: Only check coordinates where the rectangle 
-        // would touch the boundary or another rectangle.
         std::vector<int> xCoords = {0};
         std::vector<int> yCoords = {0};
 
@@ -107,13 +105,12 @@ public:
     }
 };
 
-// Our implementation of the Solution interface.
 class PackingSolution : public Solution {
 public:
     int L;
     std::vector<Box> boxes;
     std::vector<Rectangle> unplacedRectangles;
-    double maxOverlapAllowed = 0.0; // Penalty threshold
+    double maxOverlapAllowed = 0.0;
 
     PackingSolution(int L) : L(L) {}
 
@@ -126,11 +123,10 @@ public:
             
             double occupiedArea = 0;
             for (const auto& r : box.rectangles) occupiedArea += r.area();
-            double fillRatio = occupiedArea / (L * L);
+            double fillRatio = occupiedArea / (double)(L * L);
             heuristic += fillRatio * fillRatio;
         }
 
-        // violationPenalty is multiplied by a large constant to make it a "hard" constraint
         return static_cast<double>(boxes.size()) 
                - (heuristic * 0.1) 
                + (unplacedRectangles.size() * 1000.0)
@@ -141,24 +137,18 @@ public:
         return std::make_unique<PackingSolution>(*this);
     }
 
-    // A simple greedy fill: try to place the rectangle in existing boxes, 
-    // otherwise create a new box.
     void placeRectangle(Rectangle rect) {
-        // Try normal orientation
         rect.rotated = false;
         if (tryPlace(rect)) return;
 
-        // Try rotated orientation
         rect.rotated = true;
         if (tryPlace(rect)) return;
 
-        // If it doesn't fit anywhere, create a new box
         Box newBox(L);
-        rect.rotated = false; // reset
+        rect.rotated = false;
         if (newBox.addRectangle(rect)) {
             boxes.push_back(newBox);
         } else {
-            // Still doesn't fit? This should only happen if rect > L
             unplacedRectangles.push_back(rect);
         }
     }
@@ -175,10 +165,4 @@ private:
     }
 };
 
-#endif // RECTANGLE_PACKING_HPP
-
-/*
-We have now implemented the Problem Domain (Step 2). I've created the Rectangle, Box, and PackingSolution classes. The PackingSolution
-  includes a placeRectangle method that uses a "First-Fit" logic (trying existing boxes before creating a new one), which we will use as our
-  base for the Greedy algorithm.
-*/
+#endif

@@ -66,17 +66,25 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
 
             // --- LOCAL SEARCH (PACKING) ---
             auto getStartSol = [&]() {
-                GreedyAlgorithm<Rectangle, PackingSolution> greedy(rects, std::make_unique<AreaStrategy>(), std::make_unique<PackingSolution>(config.boxSize), placePacking);
-                return greedy.solve();
+                GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::make_unique<PackingSolution>(config.boxSize), placeOnePerBox);
+                return badGreedy.solve();
             };
 
             runAlgo("LS-Random-Geometry", [&]() {
-                LocalSearch<PackingSolution> ls(getStartSol(), std::make_unique<RandomizedGeometryNeighborhood>());
+                auto start = getStartSol();
+                int totalRects = 0;
+                for (const auto& b : start->boxes) totalRects += b.rectangles.size();
+                std::cout << " (Start: " << totalRects << " rects, " << start->boxes.size() << " boxes) " << std::flush;
+                LocalSearch<PackingSolution> ls(std::move(start), std::make_unique<RandomizedGeometryNeighborhood>());
                 return ls.solve()->boxes.size();
             });
 
             runAlgo("LS-Overlap-Random", [&]() {
-                LocalSearch<PackingSolution> ls(getStartSol(), std::make_unique<OverlapNeighborhood>(0.05)); // 5% overlap allowed in neighborhood
+                auto start = getStartSol();
+                int totalRects = 0;
+                for (const auto& b : start->boxes) totalRects += b.rectangles.size();
+                std::cout << " (Start: " << totalRects << " rects, " << start->boxes.size() << " boxes) " << std::flush;
+                LocalSearch<PackingSolution> ls(std::move(start), std::make_unique<OverlapNeighborhood>(0.05)); // 5% overlap allowed in neighborhood
                 return ls.solve()->boxes.size();
             });
 
@@ -84,6 +92,11 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
             if (config.numRects <= 100) {
                 runAlgo("LS-Random-Swap", [&]() {
                     auto startPerm = std::make_unique<PermutationSolution>(rects, config.boxSize);
+                    
+                    PackingSolution startSol(config.boxSize);
+                    for (const auto& r : startPerm->permutation) startSol.placeRectangle(r);
+                    std::cout << " (Start: " << startPerm->permutation.size() << " rects, " << startSol.boxes.size() << " boxes) " << std::flush;
+
                     LocalSearch<PermutationSolution> ls(std::move(startPerm), std::make_unique<RandomizedSwapNeighborhood>());
                     auto finalPerm = ls.solve();
 
@@ -95,7 +108,11 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
 
             // --- SLOW SYSTEMATIC ALGORITHMS (Only for small N) ---
                 runAlgo("LS-Systematic-Geometry", [&]() {
-                    LocalSearch<PackingSolution> ls(getStartSol(), std::make_unique<GeometryNeighborhood>());
+                    auto start = getStartSol();
+                    int totalRects = 0;
+                    for (const auto& b : start->boxes) totalRects += b.rectangles.size();
+                    std::cout << " (Start: " << totalRects << " rects, " << start->boxes.size() << " boxes) " << std::flush;
+                    LocalSearch<PackingSolution> ls(std::move(start), std::make_unique<GeometryNeighborhood>());
                     return ls.solve()->boxes.size();
                 });
 
