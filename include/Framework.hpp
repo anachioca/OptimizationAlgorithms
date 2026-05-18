@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <memory>
+#include <functional>
 
 /**
  * Interface for any optimization solution (provides objective value)
@@ -52,12 +53,19 @@ class LocalSearch : public Algorithm<S> {
 private:
     std::unique_ptr<S> currentSolution;
     std::unique_ptr<Neighborhood<S>> neighborhood;
+    std::function<void(LocalSearch<S>&)> stepCallback;
 
 public:
     LocalSearch(std::unique_ptr<S> startSolution, std::unique_ptr<Neighborhood<S>> nh)
         : currentSolution(std::move(startSolution)), neighborhood(std::move(nh)) {}
 
+    void setStepCallback(std::function<void(LocalSearch<S>&)> callback) {
+        stepCallback = callback;
+    }
+
     bool performStep() {
+        if (stepCallback) stepCallback(*this);
+        
         auto next = neighborhood->findBetterNeighbor(*currentSolution);
         if (next && next->objectiveValue() < currentSolution->objectiveValue()) {
             currentSolution = std::move(next);
@@ -67,6 +75,8 @@ public:
     }
 
     const S& getCurrentSolution() const { return *currentSolution; }
+    S& getMutableSolution() { return *currentSolution; }
+    Neighborhood<S>& getNeighborhood() { return *neighborhood; }
 
     std::unique_ptr<S> solve() override {
         while (performStep()) {

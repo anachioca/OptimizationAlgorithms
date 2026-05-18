@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <random>
 
 class Visualizer {
 private:
@@ -66,7 +67,12 @@ public:
             for (const auto& rect : sol.boxes[i].rectangles) {
                 sf::RectangleShape rectShape(sf::Vector2f(rect.getW() * scale, rect.getH() * scale));
                 rectShape.setPosition(offsetX + rect.x * scale, offsetY + rect.y * scale);
-                rectShape.setFillColor(colorRect);
+                
+                // Generate a unique color based on rectangle ID
+                std::mt19937 colorGen(rect.id);
+                std::uniform_int_distribution<> colorDist(50, 220);
+                rectShape.setFillColor(sf::Color(colorDist(colorGen), colorDist(colorGen), colorDist(colorGen)));
+                
                 rectShape.setOutlineThickness(0.5f);
                 rectShape.setOutlineColor(sf::Color::Black);
                 window.draw(rectShape);

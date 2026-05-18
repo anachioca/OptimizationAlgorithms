@@ -91,15 +91,29 @@ public:
         std::sort(yCoords.begin(), yCoords.end());
         yCoords.erase(std::unique(yCoords.begin(), yCoords.end()), yCoords.end());
 
+        int bestX = -1;
+        int bestY = -1;
+
+        // Best-Fit (Bottom-Left): Find the valid position with the lowest Y, then lowest X.
         for (int y : yCoords) {
             for (int x : xCoords) {
                 if (canPlace(rect, x, y, maxOverlapPercent)) {
-                    rect.x = x;
-                    rect.y = y;
-                    rectangles.push_back(rect);
-                    return true;
+                    if (bestY == -1 || y < bestY || (y == bestY && x < bestX)) {
+                        bestX = x;
+                        bestY = y;
+                    }
                 }
             }
+            // Optimization: Since yCoords is sorted, if we found a valid position in this row,
+            // we don't need to check higher rows because any position there will have a larger Y.
+            if (bestY != -1) break; 
+        }
+
+        if (bestX != -1) {
+            rect.x = bestX;
+            rect.y = bestY;
+            rectangles.push_back(rect);
+            return true;
         }
         return false;
     }
@@ -135,6 +149,10 @@ public:
 
     std::unique_ptr<Solution> clone() const override {
         return std::make_unique<PackingSolution>(*this);
+    }
+
+    void setMaxOverlap(double val) {
+        maxOverlapAllowed = val;
     }
 
     void placeRectangle(Rectangle rect) {
