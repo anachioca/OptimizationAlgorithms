@@ -52,22 +52,27 @@ public:
         return totalViolation;
     }
 
-    bool canPlace(const Rectangle& rect, int x, int y, double maxOverlapPercent = 0.0) const { 
+    bool canPlace(const Rectangle& rect, int x, int y, double maxOverlapPercent, int* blockingIdx = nullptr) const { 
         int rw = rect.getW();
         int rh = rect.getH();
 
         if (x < 0 || y < 0 || x + rw > L || y + rh > L) return false;
 
-        for (const auto& r : rectangles) {
+        for (size_t i = 0; i < rectangles.size(); ++i) {
+            const auto& r = rectangles[i];
             int overlapW = std::max(0, std::min(x + rw, r.x + r.getW()) - std::max(x, r.x));
             int overlapH = std::max(0, std::min(y + rh, r.y + r.getH()) - std::max(y, r.y));
             
             if (overlapW > 0 && overlapH > 0) {
-                if (maxOverlapPercent <= 0.0) return false;
+                if (maxOverlapPercent <= 0.0) {
+                    if (blockingIdx) *blockingIdx = static_cast<int>(i);
+                    return false;
+                }
 
                 double overlapArea = (double)overlapW * (double)overlapH;
                 double maxArea = (double)std::max(rect.area(), r.area());
                 if (overlapArea / maxArea > maxOverlapPercent) {
+                    if (blockingIdx) *blockingIdx = static_cast<int>(i);
                     return false;
                 }
             }
@@ -94,19 +99,26 @@ public:
         int bestX = -1;
         int bestY = -1;
 
-        // Best-Fit (Bottom-Left): Find the valid position with the lowest Y, then lowest X.
+        // Optimized Best-Fit (Bottom-Left) with Coordinate Jumping
         for (int y : yCoords) {
-            for (int x : xCoords) {
-                if (canPlace(rect, x, y, maxOverlapPercent)) {
-                    if (bestY == -1 || y < bestY || (y == bestY && x < bestX)) {
-                        bestX = x;
-                        bestY = y;
+            for (int ix = 0; ix < (int)xCoords.size(); ++ix) {
+                int x = xCoords[ix];
+                int blockingIdx = -1;
+                
+                if (canPlace(rect, x, y, maxOverlapPercent, &blockingIdx)) {
+                    bestX = x;
+                    bestY = y;
+                    break;
+                } else if (blockingIdx != -1) {
+                    // PRUNING: If blocked by a rectangle, jump to its right edge.
+                    // All intermediate xCoords will also be blocked by this same rectangle.
+                    int jumpTo = rectangles[blockingIdx].x + rectangles[blockingIdx].getW();
+                    while (ix + 1 < (int)xCoords.size() && xCoords[ix + 1] < jumpTo) {
+                        ix++;
                     }
                 }
             }
-            // Optimization: Since yCoords is sorted, if we found a valid position in this row,
-            // we don't need to check higher rows because any position there will have a larger Y.
-            if (bestY != -1) break; 
+            if (bestX != -1) break; 
         }
 
         if (bestX != -1) {
