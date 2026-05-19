@@ -68,10 +68,17 @@ public:
                 sf::RectangleShape rectShape(sf::Vector2f(rect.getW() * scale, rect.getH() * scale));
                 rectShape.setPosition(offsetX + rect.x * scale, offsetY + rect.y * scale);
                 
-                // Generate a unique color based on rectangle ID
-                std::mt19937 colorGen(rect.id);
-                std::uniform_int_distribution<> colorDist(50, 220);
-                rectShape.setFillColor(sf::Color(colorDist(colorGen), colorDist(colorGen), colorDist(colorGen)));
+                // Wong colorblind-safe palette (avoids red/green confusion)
+                static const sf::Color palette[] = {
+                    { 86, 180, 233},  // sky blue
+                    {230, 159,   0},  // orange
+                    {  0, 158, 115},  // bluish green
+                    {240, 228,  66},  // yellow
+                    {  0, 114, 178},  // blue
+                    {213,  94,   0},  // vermillion
+                    {204, 121, 167},  // reddish purple
+                };
+                rectShape.setFillColor(palette[rect.id % 7]);
                 
                 rectShape.setOutlineThickness(0.5f);
                 rectShape.setOutlineColor(sf::Color::Black);

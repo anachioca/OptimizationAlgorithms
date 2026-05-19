@@ -7,6 +7,11 @@
 class InstanceGenerator {
 public:
     static std::vector<Rectangle> generate(int numRects, int minW, int maxW, int minH, int maxH) {
+        // Sanitise: uniform_int_distribution is UB (crash) when min > max
+        numRects = std::max(1, numRects);
+        minW = std::max(1, minW);  maxW = std::max(minW, maxW);
+        minH = std::max(1, minH);  maxH = std::max(minH, maxH);
+
         std::vector<Rectangle> rects;
         std::random_device rd;
         std::mt19937 gen(rd());

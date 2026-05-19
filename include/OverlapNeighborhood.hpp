@@ -10,10 +10,12 @@
 class OverlapNeighborhood : public Neighborhood<PackingSolution> {
 private:
     double maxOverlapPercent;
+    int maxAttempts;
     std::mt19937 gen;
 
 public:
-    OverlapNeighborhood(double overlap) : maxOverlapPercent(overlap), gen(std::random_device{}()) {}
+    OverlapNeighborhood(double overlap, int attempts = 500)
+        : maxOverlapPercent(overlap), maxAttempts(attempts), gen(std::random_device{}()) {}
 
     void setMaxOverlap(double overlap) {
         maxOverlapPercent = overlap;
@@ -29,10 +31,8 @@ public:
         if (numBoxes == 0) return nullptr;
 
         std::uniform_int_distribution<> boxDis(0, numBoxes - 1);
-        
-        // Try random moves with allowed overlap
-        int attempts = 500; 
-        for (int k = 0; k < attempts; ++k) {
+
+        for (int k = 0; k < maxAttempts; ++k) {
             int b1 = boxDis(gen);
             if (current.boxes[b1].rectangles.empty()) continue;
 
