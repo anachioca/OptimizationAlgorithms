@@ -4,22 +4,36 @@
 #include "RectanglePacking.hpp"
 #include "GreedyStrategies.hpp"
 #include <random>
+#include <optional>
 
 class PermutationSolution : public Solution {
 public:
     std::vector<Rectangle> permutation;
     int L;
     mutable double cachedObjective = -1;
+    // Cached packing implied by this permutation. Filled lazily by
+    // permutationScore / analyze; reused on subsequent calls. The permutation
+    // never changes after construction, so the cache never goes stale.
+    mutable std::optional<PackingSolution> cachedPacking;
 
     PermutationSolution(std::vector<Rectangle> p, int boxSize)
         : permutation(std::move(p)), L(boxSize) {}
 
-    // Pure problem objective: build the implied packing and report its box count.
+    // Lazily materialise the packing implied by the permutation; reuse the
+    // cached one if it's already been built (e.g. by permutationScore).
+    const PackingSolution& getPacking() const {
+        if (!cachedPacking.has_value()) {
+            PackingSolution sol(L);
+            for (const auto& r : permutation) sol.placeRectangle(r);
+            cachedPacking = std::move(sol);
+        }
+        return *cachedPacking;
+    }
+
+    // Pure problem objective: number of boxes in the implied packing.
     double objectiveValue() const override {
         if (cachedObjective != -1) return cachedObjective;
-        PackingSolution sol(L);
-        for (const auto& r : permutation) sol.placeRectangle(r);
-        cachedObjective = sol.objectiveValue();
+        cachedObjective = getPacking().objectiveValue();
         return cachedObjective;
     }
 
@@ -29,11 +43,10 @@ public:
 };
 
 // Search-side scoring shared by the permutation neighborhoods: materialise the
-// implied packing and add a density bonus so plateau-equivalent permutations
-// can still be ordered.
+// implied packing (via the cache when available) and add a density bonus so
+// plateau-equivalent permutations can still be ordered.
 inline double permutationScore(const PermutationSolution& s) {
-    PackingSolution packed(s.L);
-    for (const auto& r : s.permutation) packed.placeRectangle(r);
+    const auto& packed = s.getPacking();
     double density = 0;
     for (const auto& box : packed.boxes) {
         double occupied = 0;
@@ -97,8 +110,10 @@ private:
     };
 
     static PackingInfo analyze(const PermutationSolution& s) {
-        PackingSolution packed(s.L);
-        for (const auto& r : s.permutation) packed.placeRectangle(r);
+        // Uses the cached packing on `s` if it was already built (e.g. by the
+        // previous step's permutationScore on the accepted neighbor) — saves
+        // one full rebuild per step.
+        const auto& packed = s.getPacking();
 
         int maxId = 0;
         for (const auto& r : s.permutation) maxId = std::max(maxId, r.id);
