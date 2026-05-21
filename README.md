@@ -137,6 +137,7 @@ The "solution" here is a `vector<Rectangle>` — the *order* in which rectangles
 4. **Focused attempt budget.** `min(20, 10 + N/30)` attempts per step. Each attempt is biased to a position likely to improve the score, so a small budget covers a useful chunk of move space.
 5. **Per-run step cap.** The caller (`test_env.cpp`) bounds the outer loop at `min(20, 15 + N/30)` steps. Combined with the attempt cap, this keeps the worst-case work product `maxSteps × maxAttempts × N` inside the time budget.
 6. **`analyze()` returns the score alongside the box assignments**, saving the redundant call that would otherwise be needed for the baseline.
+7. **Packing cache on `PermutationSolution`.** A `mutable std::optional<PackingSolution>` field is filled lazily by `getPacking()` the first time the packing is needed (whether for scoring, analyze, or objectiveValue). Because the permutation never changes after construction, the cache never goes stale. When a candidate is scored inside `findBetterNeighbor`, its packing is built and cached on that candidate's `PermutationSolution`; if the candidate is accepted and becomes the next step's `current`, the next `analyze()` finds the cache populated and skips the rebuild. One full packing rebuild saved per accepted step.
 
 **Systematic variant**: `SystematicSwapNeighborhood` enumerates every `(i, j)` swap with `i < j` and returns the first improvement. O(N²) evaluations per step, each rebuilding the packing — used only at very small N (≤ 50 in the test environment).
 

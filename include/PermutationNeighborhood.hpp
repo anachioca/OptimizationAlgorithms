@@ -10,17 +10,13 @@ class PermutationSolution : public Solution {
 public:
     std::vector<Rectangle> permutation;
     int L;
-    mutable double cachedObjective = -1;
-    // Cached packing implied by this permutation. Filled lazily by
-    // permutationScore / analyze; reused on subsequent calls. The permutation
-    // never changes after construction, so the cache never goes stale.
+    // Cached packing implied by this permutation. Filled by permutationScore / analyze; reused on subsequent calls.
     mutable std::optional<PackingSolution> cachedPacking;
 
     PermutationSolution(std::vector<Rectangle> p, int boxSize)
         : permutation(std::move(p)), L(boxSize) {}
 
-    // Lazily materialise the packing implied by the permutation; reuse the
-    // cached one if it's already been built (e.g. by permutationScore).
+    // Make packing implied by permutation; reuse the cached one if it's already been built
     const PackingSolution& getPacking() const {
         if (!cachedPacking.has_value()) {
             PackingSolution sol(L);
@@ -31,10 +27,10 @@ public:
     }
 
     // Pure problem objective: number of boxes in the implied packing.
+    // Required by the Solution interface; not used by the search itself —
+    // the neighborhood's score function drives candidate comparisons.
     double objectiveValue() const override {
-        if (cachedObjective != -1) return cachedObjective;
-        cachedObjective = getPacking().objectiveValue();
-        return cachedObjective;
+        return getPacking().objectiveValue();
     }
 
     std::unique_ptr<Solution> clone() const override {
