@@ -65,7 +65,7 @@ int main() {
         activeGeomLS.reset(); activePermLS.reset(); activeGreedy.reset();
         rects = InstanceGenerator::generate(numRects, minW, maxW, minH, maxH);
         auto badStart = std::make_unique<PackingSolution>(boxSize);
-        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(badStart), placeOnePerBox);
+        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<NoSort>(), std::move(badStart), placeOnePerBox);
         currentSol = badGreedy.solve();
     });
 
@@ -82,7 +82,7 @@ int main() {
 
         rects = InstanceGenerator::generate(numRects, minW, maxW, minH, maxH);
         auto badStart = std::make_unique<PackingSolution>(boxSize);
-        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(badStart), placeOnePerBox);
+        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<NoSort>(), std::move(badStart), placeOnePerBox);
         currentSol = badGreedy.solve();
     });
 
@@ -123,7 +123,7 @@ int main() {
         activePermLS.reset(); activeGreedy.reset();
         algoStartTime = std::chrono::steady_clock::now(); elapsedMs = 0.0;
         auto emptySol = std::make_unique<PackingSolution>(boxSize);
-        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(emptySol), placeOnePerBox);
+        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<NoSort>(), std::move(emptySol), placeOnePerBox);
         activeGeomLS = std::make_unique<LocalSearch<PackingSolution>>(badGreedy.solve(), std::make_unique<RandomizedGeometryNeighborhood>());
     });
 
@@ -131,7 +131,7 @@ int main() {
         activePermLS.reset(); activeGreedy.reset();
         algoStartTime = std::chrono::steady_clock::now(); elapsedMs = 0.0;
         auto emptySol = std::make_unique<PackingSolution>(boxSize);
-        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(emptySol), placeOnePerBox);
+        GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<NoSort>(), std::move(emptySol), placeOnePerBox);
         activeGeomLS = std::make_unique<LocalSearch<PackingSolution>>(badGreedy.solve(), std::make_unique<GeometryNeighborhood>());
     });
 
@@ -158,7 +158,7 @@ int main() {
             if (nh) {
                 double current = nh->getMaxOverlap();
                 if (current > 0.0) {
-                    double next = std::max(0.0, current - 0.1);
+                    double next = std::max(0.0, current - 0.001);
                     nh->setMaxOverlap(next);
                 }
             }

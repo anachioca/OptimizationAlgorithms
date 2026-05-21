@@ -34,7 +34,7 @@ public:
 /**
  * Strategy to create a decidedly bad start solution.
  */
-class BadStartingStrategy : public SelectionStrategy<Rectangle> {
+class NoSort : public SelectionStrategy<Rectangle> {
 public:
     void sort(std::vector<Rectangle>& elements) override {
         // Just leave them in their original order

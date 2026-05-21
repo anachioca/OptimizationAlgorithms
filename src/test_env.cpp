@@ -70,7 +70,7 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
 
             // --- LOCAL SEARCH (PACKING) ---
             auto getStartSol = [&]() {
-                GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::make_unique<PackingSolution>(config.boxSize), placeOnePerBox);
+                GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<NoSort>(), std::make_unique<PackingSolution>(config.boxSize), placeOnePerBox);
                 return badGreedy.solve();
             };
 
@@ -82,53 +82,60 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
                 return ls.solve()->boxes.size();
             });
 
+            
+            // Callback-based cooling. 
+            // Each tolerance level gets one search step before the next tightening.
             runAlgo("LS-Overlap-Cooling", [&]() {
-                // Start with all rects in one box at 100% overlap, then cool down to 0%
                 auto currentSol = std::make_unique<PackingSolution>(config.boxSize);
                 Box bigBox(config.boxSize);
                 for (auto r : rects) { r.x = 0; r.y = 0; bigBox.rectangles.push_back(r); }
                 currentSol->boxes.push_back(bigBox);
 
-                int attempts      = std::max(50, std::min(500, 30000 / config.numRects));
-                int maxStepsPhase = std::max(30, config.numRects / 7);
+                // Seed empty boxes once up front
+                for (int i = 0; i < 5; ++i) currentSol->boxes.push_back(Box(config.boxSize));
 
-                double overlap = 1.0;
-                while (overlap >= 0.0) {
-                    for (int i = 0; i < 3; ++i) currentSol->boxes.push_back(Box(config.boxSize));
-                    LocalSearch<PackingSolution> ls(
-                        std::move(currentSol),
-                        std::make_unique<OverlapNeighborhood>(overlap, attempts));
-                    for (int step = 0; step < maxStepsPhase && ls.performStep(); ++step) {}
-                    currentSol = std::make_unique<PackingSolution>(ls.getCurrentSolution());
-                    if (overlap <= 0.0) break;
-                    overlap -= 0.25;
-                    if (overlap < 0.0) overlap = 0.0;
-                }
+                int attempts = std::max(50, std::min(500, 30000 / config.numRects));
 
-                // Guarantee overlap-free: extract all rects from violating boxes,
-                // clear those boxes, then reinsert using placeRectangle which tries
-                // all existing boxes before opening a new one.
+                LocalSearch<PackingSolution> ls(
+                    std::move(currentSol),
+                    std::make_unique<OverlapNeighborhood>(1.0, attempts));
+
+                ls.setStepCallback([](LocalSearch<PackingSolution>& lsInst) {
+                    auto* nh = dynamic_cast<OverlapNeighborhood*>(&lsInst.getNeighborhood());
+                    if (nh && nh->getMaxOverlap() > 0.0) {
+                        nh->setMaxOverlap(std::max(0.0, nh->getMaxOverlap() - 0.1));
+                    }
+                });
+
+                // Keep stepping while either we found an improvement OR there's
+                // still cooling left to do. Once tolerance hits 0 and no
+                // improvement is found, exit.
+                auto* nh = dynamic_cast<OverlapNeighborhood*>(&ls.getNeighborhood());
+                while (ls.performStep() || (nh && nh->getMaxOverlap() > 0.0)) {}
+
+                auto finalSol = std::make_unique<PackingSolution>(ls.getCurrentSolution());
+
+                // guarantee overlap-free.
                 std::vector<Rectangle> toRepack;
-                for (auto& box : currentSol->boxes) {
+                for (auto& box : finalSol->boxes) {
                     if (box.getOverlapViolation(0.0) > 0.0) {
                         for (auto& r : box.rectangles) toRepack.push_back(r);
                         box.rectangles.clear();
                     }
                 }
-                currentSol->boxes.erase(
-                    std::remove_if(currentSol->boxes.begin(), currentSol->boxes.end(),
+                finalSol->boxes.erase(
+                    std::remove_if(finalSol->boxes.begin(), finalSol->boxes.end(),
                         [](const Box& b) { return b.rectangles.empty(); }),
-                    currentSol->boxes.end());
-                for (auto& r : toRepack)
-                    currentSol->placeRectangle(r);
+                    finalSol->boxes.end());
+                for (auto& r : toRepack) finalSol->placeRectangle(r);
 
-                return currentSol->boxes.size();
+                return finalSol->boxes.size();
             });
 
             // --- LOCAL SEARCH (PERMUTATION) ---
             // Decidedly bad start: SmallestFirst order. Deterministic and provably
             // worse than random shuffle in this problem.
-            if (config.numRects <= 500) { // Permutation LS is very slow, only run for smaller instances
+            if (config.numRects <= 100) { // Permutation LS is very slow, only run for smaller instances
                 runAlgo("LS-Random-Swap", [&]() {
                     std::vector<Rectangle> badPerm = rects;
                     SmallestFirstStrategy().sort(badPerm);
@@ -145,7 +152,7 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
             }
 
             // --- SLOW SYSTEMATIC ALGORITHMS (Only for small N) ---
-            if (config.numRects <= 200) {
+            if (config.numRects <= 100) {
                 runAlgo("LS-Systematic-Geometry", [&]() {
                     auto start = getStartSol();
                     LocalSearch<PackingSolution> ls(std::move(start), std::make_unique<GeometryNeighborhood>());
