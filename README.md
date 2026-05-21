@@ -97,7 +97,7 @@ These are the two "fundamentally different" strategies the spec requires: one op
 
 Two additional helpers are used to build deliberately bad starts for local search (see below):
 - **`SmallestFirstStrategy`** — area ascending. Provably worst-of-the-sort orderings on this problem.
-- **`BadStartingStrategy`** — empty `sort()`. Leaves rectangles in their generation order; paired with `placeOnePerBox` for the worst-possible packing.
+- **`NoSort`** — empty `sort()`. Leaves rectangles in their generation order; paired with `placeOnePerBox` for the worst-possible packing.
 
 Two placement functions:
 - **`placePacking`** — calls `placeRectangle`. The real greedy placement.
