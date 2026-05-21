@@ -105,9 +105,10 @@ int main() {
     auto startPermLS = [&](auto neighborhood) {
         activeGeomLS.reset(); activeGreedy.reset();
         algoStartTime = std::chrono::steady_clock::now(); elapsedMs = 0.0;
+        // Decidedly bad start: smallest rectangles first means big ones can't
+        // fit later → many extra boxes. Deterministic, much worse than random.
         std::vector<Rectangle> badPerm = rects;
-        std::shuffle(badPerm.begin(), badPerm.end(), std::mt19937(std::random_device{}()));
-        // Show the shuffled starting state immediately
+        SmallestFirstStrategy().sort(badPerm);
         currentSol = std::make_shared<PackingSolution>(boxSize);
         for (auto& r : badPerm) currentSol->placeRectangle(r);
         activePermLS = std::make_unique<LocalSearch<PermutationSolution>>(

@@ -126,15 +126,13 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
             });
 
             // --- LOCAL SEARCH (PERMUTATION) ---
-            if (config.numRects <= 200) {
+            // Decidedly bad start: SmallestFirst order. Deterministic and provably
+            // worse than random shuffle in this problem.
+            if (config.numRects <= 500) { // Permutation LS is very slow, only run for smaller instances
                 runAlgo("LS-Random-Swap", [&]() {
                     std::vector<Rectangle> badPerm = rects;
-                    std::shuffle(badPerm.begin(), badPerm.end(), std::mt19937(std::random_device{}()));
+                    SmallestFirstStrategy().sort(badPerm);
                     auto startPerm = std::make_unique<PermutationSolution>(std::move(badPerm), config.boxSize);
-                    
-                    PackingSolution startSol(config.boxSize);
-                    for (const auto& r : startPerm->permutation) startSol.placeRectangle(r);
-                    //std::cout << " (Start: " << startPerm->permutation.size() << " rects, " << startSol.boxes.size() << " boxes) " << std::flush;
 
                     LocalSearch<PermutationSolution> ls(std::move(startPerm), std::make_unique<RandomizedSwapNeighborhood>());
                     auto finalPerm = ls.solve();
@@ -144,13 +142,12 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
                     for (const auto& r : finalPerm->permutation) finalSol.placeRectangle(r);
                     return finalSol.boxes.size();
                 });
+            }
 
             // --- SLOW SYSTEMATIC ALGORITHMS (Only for small N) ---
+            if (config.numRects <= 200) {
                 runAlgo("LS-Systematic-Geometry", [&]() {
                     auto start = getStartSol();
-                    int totalRects = 0;
-                    for (const auto& b : start->boxes) totalRects += b.rectangles.size();
-                    // std::cout << " (Start: " << totalRects << " rects, " << start->boxes.size() << " boxes) " << std::flush;
                     LocalSearch<PackingSolution> ls(std::move(start), std::make_unique<GeometryNeighborhood>());
                     return ls.solve()->boxes.size();
                 });
@@ -158,14 +155,14 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
                 if (config.numRects <= 50) { // Systematic swap is very slow, only run for very small instances
                     runAlgo("LS-Systematic-Swap", [&]() {
                         std::vector<Rectangle> badPerm = rects;
-                        std::shuffle(badPerm.begin(), badPerm.end(), std::mt19937(std::random_device{}()));
+                        SmallestFirstStrategy().sort(badPerm);
                         auto startPerm = std::make_unique<PermutationSolution>(std::move(badPerm), config.boxSize);
                         LocalSearch<PermutationSolution> ls(std::move(startPerm), std::make_unique<SystematicSwapNeighborhood>());
                         auto finalPerm = ls.solve();
                         PackingSolution finalSol(config.boxSize);
                         for (const auto& r : finalPerm->permutation) finalSol.placeRectangle(r);
                         return finalSol.boxes.size();
-                    }); 
+                    });
                 }
             }
         }

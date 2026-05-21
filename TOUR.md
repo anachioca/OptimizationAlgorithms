@@ -204,9 +204,7 @@ All implement `SelectionStrategy<Rectangle>` — one `sort()` method, in-place, 
 
 **`MaxSideStrategy`** — sorts by `max(width, height)` descending. A 50×1 rectangle and a 7×7 have nearly the same area but the 50×1 is much harder to place because it constrains the full width of a box. This catches awkward cases that area alone misses.
 
-**`SmallestFirstStrategy`** — sorts smallest area first. Intentionally bad: small rectangles placed first leave awkward gaps that large rectangles can't fill. Used in two roles:
-- As a **bad starting solution** for local search (instruction requires a deliberately poor start so improvements are clearly visible)
-- As the initial ordering for geometry-based local search in `main.cpp`, generating a provably suboptimal packing for local search to improve
+**`SmallestFirstStrategy`** — sorts smallest area first. Intentionally bad: small rectangles placed first leave awkward gaps that large rectangles can't fill. Used as the **decidedly bad starting permutation** for the rule-based (permutation) local search in both the GUI and the test environment — the spec requires a deliberately poor start so improvements are clearly visible, and SmallestFirst is deterministic and provably worse than a random shuffle on this problem.
 
 ### `BadStartingStrategy`
 
@@ -247,7 +245,7 @@ Every neighbor is produced by:
 
 Triple nested loop: every `b1`, every rectangle in `b1`, every other `b2`. Returns the **first** strictly better neighbor (first-improvement, not best-improvement).
 
-Correct but slow. Worst-case per step: O(K·N) neighbor evaluations, each calling `addRectangle` which is itself O(N²). Only used for small instances (`numRects <= 100` in `test_env.cpp`, and the "Syst Geometry" button in the GUI).
+Correct but slow. Worst-case per step: O(K·N) neighbor evaluations, each calling `addRectangle` which is itself O(N²). Only used for small instances (`numRects <= 200` in `test_env.cpp`, and the "Syst Geometry" button in the GUI).
 
 ### `RandomizedGeometryNeighborhood` — Tuned (lines 65–123)
 
@@ -271,7 +269,7 @@ Indirect solution representation. Holds only a `vector<Rectangle>` (the ordering
 
 The cache is never explicitly invalidated — it doesn't need to be. `PermutationSolution` objects are immutable after construction. Every neighbor is a new object with `cachedObjective = -1`, so it always recomputes on first call.
 
-The integer-box-count objective alone would leave the swap neighborhoods staring at large plateaus where most swaps produce identical box counts. The free function `permutationScore()` at the top of the file materialises the implied packing and adds the same squared fill-ratio bonus the geometry neighborhoods use. Both swap neighborhoods call `permutationScore()` (not `objectiveValue()`) when comparing candidates, so they have a gradient to follow across plateaus.
+The integer-box-count objective alone would leave the permutation neighborhoods staring at large plateaus where most moves produce identical box counts. The free function `permutationScore()` at the top of the file materialises the implied packing and adds the same squared fill-ratio bonus the geometry neighborhoods use. The tuned randomized neighborhood uses a private `analyze()` helper that computes the same score *and* records each rectangle's box assignment in one pass (used for sparse-box bias — see below); `SystematicSwapNeighborhood` just calls `permutationScore()`. Either way, every comparison goes through the neighborhood-side score, never through `objectiveValue()` on the solution.
 
 ### `SystematicSwapNeighborhood` (lines 37–58)
 
@@ -279,13 +277,21 @@ Tries every pair `(i, j)` with `i < j`, swapping in-place, evaluating, then swap
 
 The in-place swap-and-backtrack avoids allocating a new vector per candidate. Worst case: O(N²) evaluations per call, each rebuilding a full `PackingSolution` — O(N³) per step total. Restricted to `numRects <= 50` in `test_env.cpp`.
 
-### `RandomizedSwapNeighborhood` (lines 64–93)
+### `RandomizedSwapNeighborhood` — the tuned version
 
-Same move, limited to `min(1000, N*2)` attempts. The cap formula is intentional: for small N, `N*2` gives reasonable coverage of the N*(N-1)/2 swap space; for large N, `N*2` grows too large and 1000 is the hard time-budget ceiling.
+Originally this was a pure 2-swap with `min(1000, 2N)` random attempts per step. That gave the local search 1000 chances per step at large N, each of which rebuilt a full packing — at N=200 this already took ~20 s, and the test environment silently skipped it at higher N. The spec asks every algorithm to handle 1000 rectangles in 10 s, so the neighborhood needed rethinking. Today's version applies four tuning measures:
 
-Copies the full permutation vector per attempt rather than swapping in-place. The extra allocation is negligible since the bottleneck is `objectiveValue()` replaying the full greedy placement, not the vector copy.
+**(A) Sparse-box-biased source selection.** At the top of each `findBetterNeighbor`, the helper `analyze()` does one packing pass and records which box each rectangle id landed in plus which box ended up sparsest. The positions of rectangles that landed in the sparsest box are collected as `sparsePositions`. When picking the source position `i` for the next move, with probability 0.7 the neighborhood draws from `sparsePositions`; otherwise uniformly. This directly implements the spec's hint (`Instruction.txt` line 75–76): *Rechtecke in relativ leeren Boxen anderswo in der Permutation zu platzieren.*
 
-`if (i == j) continue` skips self-swaps (identical permutation, guaranteed not better) — same rationale as `b1 == b2` in the geometry neighborhood.
+**(B) Mixed move type — swap or insert.** Each attempt flips a coin: half the time the move is a 2-swap (as before), half the time it's an **insertion** — remove the rectangle at position `i`, insert it at position `j`. Insertion can pull a rectangle a long distance across the permutation in one move without disturbing the elements in between; swap can only achieve that by chaining many moves. The two move types complement each other.
+
+**(C) Lower attempt budget.** Now `min(150, 40 + N/10)` instead of `min(1000, 2N)` — at N=1000 that's 140 attempts versus 1000. The reduction is safe precisely because (A) makes each attempt more likely to land, so per-step coverage of *useful* moves is comparable to or better than the old version while wall-clock time drops by ~7×.
+
+**(D) `analyze()` returns the score itself**, so we don't pay an extra `permutationScore` call at the top of the step — the two passes are folded into one. The score used inside the loop for the baseline is `info.score` (computed in `analyze`); per-candidate scores still use the standalone `permutationScore` helper because we don't need the box-assignment side data for neighbors.
+
+**Where this leaves us**: the time budget for permutation LS is now in line with the geometry neighborhoods (a few seconds at N=1000 in the test environment), and quality is competitive with greedy at all sizes.
+
+`if (i == j) continue` skips no-op moves — same rationale as `b1 == b2` in the geometry neighborhood.
 
 ### Key asymmetry vs. geometry neighborhoods
 
@@ -484,7 +490,7 @@ On click, the full algorithm runs synchronously in one shot — rectangles are s
 
 ### LS (Rand Swap) / LS (Syst Swap)
 
-The starting permutation is a **random shuffle** of the instance. On click, this shuffled ordering is immediately repacked into `currentSol` and displayed — the viewer sees the bad starting state before any improvement begins.
+The starting permutation is **SmallestFirst** — the instance sorted by area ascending. This matches the spec's "decidedly bad" requirement (small rectangles placed first leave gaps that the big ones can't fill later) and is deterministic, which makes benchmarking repeatable. On click, this ordering is immediately repacked into `currentSol` and displayed — the viewer sees the bad starting state before any improvement begins.
 
 **One step per frame.** After every step, `currentSol` is rebuilt by replaying `placeRectangle` on the current permutation. Every box-count drop is therefore visible as it happens. The algorithm stops as soon as a step finds no improvement.
 
