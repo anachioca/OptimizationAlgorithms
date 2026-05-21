@@ -59,15 +59,19 @@ public:
     LocalSearch(std::unique_ptr<S> startSolution, std::unique_ptr<Neighborhood<S>> nh)
         : currentSolution(std::move(startSolution)), neighborhood(std::move(nh)) {}
 
+    // Used to do the overlap cooling on GUI
     void setStepCallback(std::function<void(LocalSearch<S>&)> callback) {
         stepCallback = callback;
     }
 
+    // Calls neighborhood->findBetterNeighbor and adopts the candidate if one is returned.
+    // The neighborhood owns the notion of "better" (it may use a relaxed/heuristic
+    // score that differs from Solution::objectiveValue()).
     bool performStep() {
         if (stepCallback) stepCallback(*this);
-        
+
         auto next = neighborhood->findBetterNeighbor(*currentSolution);
-        if (next && next->objectiveValue() < currentSolution->objectiveValue()) {
+        if (next) {
             currentSolution = std::move(next);
             return true;
         }
@@ -80,7 +84,7 @@ public:
 
     std::unique_ptr<S> solve() override {
         while (performStep()) {
-            // keep stepping
+            // keep doing steps until no better neighbor is found
         }
         return std::unique_ptr<S>(static_cast<S*>(currentSolution->clone().release())); 
     }
@@ -94,7 +98,7 @@ class GreedyAlgorithm : public Algorithm<S> {
 private:
     std::vector<E> elements; // List of elements to process (rectangles in this case)
     std::unique_ptr<SelectionStrategy<E>> strategy;
-    std::unique_ptr<S> initialSolution;
+    std::unique_ptr<S> initialSolution; // empty
     typedef void (*PlacementFunc)(S&, E); // Function pointer type for placing an element into the solution
     PlacementFunc place; // this way we keep the Framework generic and can use different placement logic if needed
 

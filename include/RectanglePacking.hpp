@@ -36,9 +36,10 @@ public:
                 const auto& r1 = rectangles[i];
                 const auto& r2 = rectangles[j];
                 
-                int overlapW = std::max(0, std::min(r1.x + r1.getW(), r2.x + r2.getW()) - std::max(r1.x, r2.x));
+                int overlapW = std::max(0, std::min(r1.x + r1.getW(), r2.x + r2.getW()) - std::max(r1.x, r2.x)); 
                 int overlapH = std::max(0, std::min(r1.y + r1.getH(), r2.y + r2.getH()) - std::max(r1.y, r2.y));
                 
+                // If there's an overlap, calculate the ratio and check against the threshold
                 if (overlapW > 0 && overlapH > 0) {
                     double overlapArea = (double)overlapW * (double)overlapH;
                     double maxArea = (double)std::max(r1.area(), r2.area());
@@ -59,10 +60,14 @@ public:
         if (x < 0 || y < 0 || x + rw > L || y + rh > L) return false;
 
         for (size_t i = 0; i < rectangles.size(); ++i) {
+            // For each existing rectangle, check if placing the new rectangle at (x,y) would cause an overlap violation
             const auto& r = rectangles[i];
+
             int overlapW = std::max(0, std::min(x + rw, r.x + r.getW()) - std::max(x, r.x));
             int overlapH = std::max(0, std::min(y + rh, r.y + r.getH()) - std::max(y, r.y));
             
+            // If there's an overlap, check if it violates the maxOverlapPercent threshold
+            // Saves what rectangle is blocking the placement for pruning purposes in the neighborhood
             if (overlapW > 0 && overlapH > 0) {
                 if (maxOverlapPercent <= 0.0) {
                     if (blockingIdx) *blockingIdx = static_cast<int>(i);
@@ -81,9 +86,11 @@ public:
     }
 
     bool addRectangle(Rectangle rect, double maxOverlapPercent = 0.0) {
+        // List of candidate coordinates to try placing the rectangle, initialized with (0,0)
         std::vector<int> xCoords = {0};
         std::vector<int> yCoords = {0};
 
+        // Add coordinates to the right and top of existing rectangles as potential placement points
         for (const auto& r : rectangles) {
             int right = r.x + r.getW();
             int top = r.y + r.getH();
@@ -136,35 +143,19 @@ public:
     int L;
     std::vector<Box> boxes;
     std::vector<Rectangle> unplacedRectangles;
-    double maxOverlapAllowed = 0.0;
 
     PackingSolution(int L) : L(L) {}
 
+    // Pure problem objective: number of boxes used, with a hard penalty for unplaced
+    // rectangles. Search-side concerns (overlap tolerance, packing-density heuristics)
+    // live inside the neighborhoods.
     double objectiveValue() const override {
-        double violationPenalty = 0;
-        double heuristic = 0;
-        
-        for (const auto& box : boxes) {
-            violationPenalty += box.getOverlapViolation(maxOverlapAllowed);
-            
-            double occupiedArea = 0;
-            for (const auto& r : box.rectangles) occupiedArea += r.area();
-            double fillRatio = occupiedArea / (double)(L * L);
-            heuristic += fillRatio * fillRatio;
-        }
-
-        return static_cast<double>(boxes.size()) 
-               - (heuristic * 0.1) 
-               + (unplacedRectangles.size() * 1000.0)
-               + (violationPenalty * 5000.0); 
+        return static_cast<double>(boxes.size())
+               + unplacedRectangles.size() * 1000.0;
     }
 
     std::unique_ptr<Solution> clone() const override {
         return std::make_unique<PackingSolution>(*this);
-    }
-
-    void setMaxOverlap(double val) {
-        maxOverlapAllowed = val;
     }
 
     void placeRectangle(Rectangle rect) {

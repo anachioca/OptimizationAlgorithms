@@ -11,6 +11,7 @@
 #include <vector>
 #include <random>
 #include <chrono>
+#include <optional>
 
 int main() {
     int numRects = 40, boxSize = 50, minW = 5, maxW = 20, minH = 5, maxH = 20;
@@ -30,10 +31,14 @@ int main() {
     std::unique_ptr<LocalSearch<PackingSolution>> activeGeomLS;
     std::unique_ptr<LocalSearch<PermutationSolution>> activePermLS;
 
+    struct GreedyAnimState { std::vector<Rectangle> sortedRects; size_t idx = 0; };
+    std::optional<GreedyAnimState> activeGreedy;
+
     // Elapsed time tracking
     auto algoStartTime = std::chrono::steady_clock::now();
     double elapsedMs   = 0.0;
 
+    // Define buttons and inputs
     std::vector<std::unique_ptr<NumericInput>> inputs;
     float startY = 30;
     inputs.push_back(std::make_unique<NumericInput>("Rects", numRects, sf::Vector2f(20, startY), font));
@@ -48,6 +53,7 @@ int main() {
     float btnH = 35;
     float btnW = 260;
     
+    // Helper to add buttons with less boilerplate
     auto addBtn = [&](std::string label, std::function<void()> action) {
         auto btn = std::make_unique<Button>(label, sf::Vector2f(20, btnY), sf::Vector2f(btnW, btnH), font);
         btn->onClick = action;
@@ -56,7 +62,7 @@ int main() {
     };
 
     addBtn("New Instance (Manual)", [&]() {
-        activeGeomLS.reset(); activePermLS.reset();
+        activeGeomLS.reset(); activePermLS.reset(); activeGreedy.reset();
         rects = InstanceGenerator::generate(numRects, minW, maxW, minH, maxH);
         auto badStart = std::make_unique<PackingSolution>(boxSize);
         GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(badStart), placeOnePerBox);
@@ -64,7 +70,7 @@ int main() {
     });
 
     addBtn("Random Instance (Max 40)", [&]() {
-        activeGeomLS.reset(); activePermLS.reset();
+        activeGeomLS.reset(); activePermLS.reset(); activeGreedy.reset();
         std::random_device rd;
         std::mt19937 gen(rd());
         numRects = std::uniform_int_distribution<>(10, 40)(gen);
@@ -80,50 +86,40 @@ int main() {
         currentSol = badGreedy.solve();
     });
 
-    addBtn("Greedy (Area)", [&]() {
-        activeGeomLS.reset(); activePermLS.reset();
+    auto startGreedy = [&](auto strategy) {
+        activeGeomLS.reset(); activePermLS.reset(); activeGreedy.reset();
+        std::vector<Rectangle> sorted = rects;
         algoStartTime = std::chrono::steady_clock::now();
-        GreedyAlgorithm<Rectangle, PackingSolution> greedy(rects, std::make_unique<AreaStrategy>(), std::make_unique<PackingSolution>(boxSize), placePacking);
-        currentSol = greedy.solve();
-        elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - algoStartTime).count();
-    });
+        strategy.sort(sorted);
+        { PackingSolution tmp(boxSize); for (auto& r : sorted) placePacking(tmp, r); }
+        elapsedMs = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - algoStartTime).count();
+        currentSol = std::make_shared<PackingSolution>(boxSize);
+        activeGreedy = GreedyAnimState{std::move(sorted), 0};
+    };
 
-    addBtn("Greedy (MaxSide)", [&]() {
-        activeGeomLS.reset(); activePermLS.reset();
-        algoStartTime = std::chrono::steady_clock::now();
-        GreedyAlgorithm<Rectangle, PackingSolution> greedy(rects, std::make_unique<MaxSideStrategy>(), std::make_unique<PackingSolution>(boxSize), placePacking);
-        currentSol = greedy.solve();
-        elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - algoStartTime).count();
-    });
+    addBtn("Greedy (Area)",     [&]() { startGreedy(AreaStrategy()); });
+    addBtn("Greedy (MaxSide)",  [&]() { startGreedy(MaxSideStrategy()); });
+    addBtn("Greedy (Smallest)", [&]() { startGreedy(SmallestFirstStrategy()); });
 
-    addBtn("Greedy (Smallest)", [&]() {
-        activeGeomLS.reset(); activePermLS.reset();
-        algoStartTime = std::chrono::steady_clock::now();
-        GreedyAlgorithm<Rectangle, PackingSolution> greedy(rects, std::make_unique<SmallestFirstStrategy>(), std::make_unique<PackingSolution>(boxSize), placePacking);
-        currentSol = greedy.solve();
-        elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - algoStartTime).count();
-    });
-
-    addBtn("LS (Rand Swap)", [&]() {
-        activeGeomLS.reset();
+    auto startPermLS = [&](auto neighborhood) {
+        activeGeomLS.reset(); activeGreedy.reset();
         algoStartTime = std::chrono::steady_clock::now(); elapsedMs = 0.0;
         std::vector<Rectangle> badPerm = rects;
-        SmallestFirstStrategy().sort(badPerm); // decidedly bad start
-        auto startSol = std::make_unique<PermutationSolution>(std::move(badPerm), boxSize);
-        activePermLS = std::make_unique<LocalSearch<PermutationSolution>>(std::move(startSol), std::make_unique<RandomizedSwapNeighborhood>());
-    });
+        std::shuffle(badPerm.begin(), badPerm.end(), std::mt19937(std::random_device{}()));
+        // Show the shuffled starting state immediately
+        currentSol = std::make_shared<PackingSolution>(boxSize);
+        for (auto& r : badPerm) currentSol->placeRectangle(r);
+        activePermLS = std::make_unique<LocalSearch<PermutationSolution>>(
+            std::make_unique<PermutationSolution>(std::move(badPerm), boxSize),
+            std::move(neighborhood));
+    };
 
-    addBtn("LS (Syst Swap)", [&]() {
-        activeGeomLS.reset();
-        algoStartTime = std::chrono::steady_clock::now(); elapsedMs = 0.0;
-        std::vector<Rectangle> badPerm = rects;
-        SmallestFirstStrategy().sort(badPerm); // decidedly bad start
-        auto startSol = std::make_unique<PermutationSolution>(std::move(badPerm), boxSize);
-        activePermLS = std::make_unique<LocalSearch<PermutationSolution>>(std::move(startSol), std::make_unique<SystematicSwapNeighborhood>());
-    });
+    addBtn("LS (Rand Swap)", [&]() { startPermLS(std::make_unique<RandomizedSwapNeighborhood>()); });
+    addBtn("LS (Syst Swap)", [&]() { startPermLS(std::make_unique<SystematicSwapNeighborhood>()); });
 
     addBtn("LS (Rand Geometry)", [&]() {
-        activePermLS.reset();
+        activePermLS.reset(); activeGreedy.reset();
         algoStartTime = std::chrono::steady_clock::now(); elapsedMs = 0.0;
         auto emptySol = std::make_unique<PackingSolution>(boxSize);
         GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(emptySol), placeOnePerBox);
@@ -131,7 +127,7 @@ int main() {
     });
 
     addBtn("LS (Syst Geometry)", [&]() {
-        activePermLS.reset();
+        activePermLS.reset(); activeGreedy.reset();
         algoStartTime = std::chrono::steady_clock::now(); elapsedMs = 0.0;
         auto emptySol = std::make_unique<PackingSolution>(boxSize);
         GreedyAlgorithm<Rectangle, PackingSolution> badGreedy(rects, std::make_unique<BadStartingStrategy>(), std::move(emptySol), placeOnePerBox);
@@ -139,7 +135,7 @@ int main() {
     });
 
     addBtn("LS (Overlap Cooling)", [&]() {
-        activePermLS.reset();
+        activePermLS.reset(); activeGreedy.reset();
         algoStartTime = std::chrono::steady_clock::now(); elapsedMs = 0.0;
 
         // All rects stacked in one box at 100% overlap — trivially 1 box, easy starting point
@@ -147,24 +143,22 @@ int main() {
         Box bigBox(boxSize);
         for (auto r : rects) { r.x = 0; r.y = 0; bigBox.rectangles.push_back(r); }
         startSol->boxes.push_back(bigBox);
-        startSol->setMaxOverlap(1.0);
         // Empty boxes give the neighborhood room to spread rects into
+        // Create 5 empty boxes to start with so the first few steps can already try placing into new boxes as the overlap threshold cools.
         for (int i = 0; i < 5; ++i) startSol->boxes.push_back(Box(boxSize));
 
         auto overlapNH = std::make_unique<OverlapNeighborhood>(1.0);
         auto ls = std::make_unique<LocalSearch<PackingSolution>>(std::move(startSol), std::move(overlapNH));
-        
-        // Define cooling callback
+
+        // Cooling callback: after each step, lower the neighborhood's overlap tolerance.
+        // The tolerance lives inside the neighborhood now, so no solution-side sync is needed.
         ls->setStepCallback([](LocalSearch<PackingSolution>& lsInst) {
             auto* nh = dynamic_cast<OverlapNeighborhood*>(&lsInst.getNeighborhood());
             if (nh) {
                 double current = nh->getMaxOverlap();
                 if (current > 0.0) {
-                    double next = std::max(0.0, current - 0.005); 
+                    double next = std::max(0.0, current - 0.1);
                     nh->setMaxOverlap(next);
-                    
-                    // Sync the current solution as well so objective function uses new threshold
-                    lsInst.getMutableSolution().setMaxOverlap(next);
                 }
             }
         });
@@ -181,7 +175,6 @@ int main() {
     // Step-skipping state: avoid flooding the viewer with micro-changes every frame
     size_t geomLastBoxCount    = 0;
     int    geomFramesSinceUpdate = 0;
-    int    permFramesSinceUpdate = 0;
 
     while (window.isOpen()) {
         sf::Event event;
@@ -199,6 +192,7 @@ int main() {
             auto* overlapNH = dynamic_cast<OverlapNeighborhood*>(&activeGeomLS->getNeighborhood());
 
             bool foundImprovement = false;
+            // breaks only if no improvement is found after a full batch, allowing the cooling to continue even through plateaus
             for (int s = 0; s < STEPS_PER_FRAME; ++s) {
                 bool improved = activeGeomLS->performStep();
                 if (improved) foundImprovement = true;
@@ -238,25 +232,21 @@ int main() {
             }
         }
         if (activePermLS) {
-            // Repacking is expensive per step, so use a small batch and a fixed display interval
-            const int STEPS_PER_FRAME  = 5;
-            const int DISPLAY_INTERVAL = 30;
-
-            bool done = false;
-            for (int s = 0; s < STEPS_PER_FRAME; ++s) {
-                if (!activePermLS->performStep()) { done = true; break; }
+            // 1 step per frame; always redraw so every improvement is visible
+            bool improved = activePermLS->performStep();
+            auto& perm = activePermLS->getCurrentSolution().permutation;
+            auto sol = std::make_shared<PackingSolution>(boxSize);
+            for (auto& r : perm) sol->placeRectangle(r);
+            currentSol = sol;
+            if (!improved) activePermLS.reset();
+        }
+        if (activeGreedy) {
+            if (activeGreedy->idx < activeGreedy->sortedRects.size()) {
+                placePacking(*currentSol, activeGreedy->sortedRects[activeGreedy->idx]);
+                ++activeGreedy->idx;
+            } else {
+                activeGreedy.reset();
             }
-
-            permFramesSinceUpdate++;
-            if (done || permFramesSinceUpdate >= DISPLAY_INTERVAL) {
-                auto& perm = activePermLS->getCurrentSolution().permutation;
-                auto sol = std::make_shared<PackingSolution>(boxSize);
-                for (auto& r : perm) sol->placeRectangle(r);
-                currentSol = sol;
-                permFramesSinceUpdate = 0;
-            }
-
-            if (done) activePermLS.reset();
         }
 
         window.clear(sf::Color::White);

@@ -68,7 +68,8 @@ public:
                 sf::RectangleShape rectShape(sf::Vector2f(rect.getW() * scale, rect.getH() * scale));
                 rectShape.setPosition(offsetX + rect.x * scale, offsetY + rect.y * scale);
                 
-                // Wong colorblind-safe palette (avoids red/green confusion)
+                // Wong base colors + 50% tints.
+                // Base hues pass the Wong colorblind test; tints stay distinguishable
                 static const sf::Color palette[] = {
                     { 86, 180, 233},  // sky blue
                     {230, 159,   0},  // orange
@@ -77,10 +78,17 @@ public:
                     {  0, 114, 178},  // blue
                     {213,  94,   0},  // vermillion
                     {204, 121, 167},  // reddish purple
+                    {170, 217, 244},  // sky blue (light)
+                    {242, 207, 127},  // orange (light)
+                    {127, 206, 185},  // bluish green (light)
+                    {247, 241, 160},  // yellow (light)
+                    {127, 184, 216},  // blue (light)
+                    {234, 174, 127},  // vermillion (light)
+                    {229, 188, 211},  // reddish purple (light)
                 };
-                rectShape.setFillColor(palette[rect.id % 7]);
+                rectShape.setFillColor(palette[rect.id % 14]);
                 
-                rectShape.setOutlineThickness(0.5f);
+                rectShape.setOutlineThickness(-1.0f);
                 rectShape.setOutlineColor(sf::Color::Black);
                 window.draw(rectShape);
             }

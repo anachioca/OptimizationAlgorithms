@@ -46,7 +46,7 @@ inline void placePacking(PackingSolution& sol, Rectangle rect) {
     sol.placeRectangle(rect);
 }
 
-// Decidedly bad placement: every rectangle gets its own box
+// very bad placement: every rectangle gets its own box, in a random order
 inline void placeOnePerBox(PackingSolution& sol, Rectangle rect) {
     Box newBox(sol.L);
     rect.x = 0;

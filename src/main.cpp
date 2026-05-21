@@ -83,11 +83,10 @@ void runBenchmark(int numRects, int boxSize) {
             bigBox.rectangles.push_back(r);
         }
         currentSol->boxes.push_back(bigBox);
-        currentSol->maxOverlapAllowed = 1.0;
 
         double overlap = 1.0;
         while (overlap >= 0.0) {
-            // To reduce overlap, we might need more boxes. 
+            // To reduce overlap, we might need more boxes.
             // We add a few empty boxes to give the neighborhood room to move things.
             // (LocalSearch will eventually remove them if they stay empty).
             for(int i=0; i < 5; ++i) currentSol->boxes.push_back(Box(boxSize));
@@ -95,11 +94,10 @@ void runBenchmark(int numRects, int boxSize) {
             auto nh = std::make_unique<OverlapNeighborhood>(overlap);
             LocalSearch<PackingSolution> ls(std::move(currentSol), std::move(nh));
             currentSol = ls.solve();
-            
+
             if (overlap <= 0.0) break;
             overlap -= 0.2;
             if (overlap < 0.0) overlap = 0.0;
-            currentSol->maxOverlapAllowed = overlap;
         }
 
         auto end = std::chrono::high_resolution_clock::now();

@@ -88,7 +88,6 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
                 Box bigBox(config.boxSize);
                 for (auto r : rects) { r.x = 0; r.y = 0; bigBox.rectangles.push_back(r); }
                 currentSol->boxes.push_back(bigBox);
-                currentSol->maxOverlapAllowed = 1.0;
 
                 int attempts      = std::max(50, std::min(500, 30000 / config.numRects));
                 int maxStepsPhase = std::max(30, config.numRects / 7);
@@ -104,7 +103,6 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
                     if (overlap <= 0.0) break;
                     overlap -= 0.25;
                     if (overlap < 0.0) overlap = 0.0;
-                    currentSol->maxOverlapAllowed = overlap;
                 }
 
                 // Guarantee overlap-free: extract all rects from violating boxes,
@@ -128,10 +126,10 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
             });
 
             // --- LOCAL SEARCH (PERMUTATION) ---
-            if (config.numRects <= 100) {
+            if (config.numRects <= 200) {
                 runAlgo("LS-Random-Swap", [&]() {
                     std::vector<Rectangle> badPerm = rects;
-                    SmallestFirstStrategy().sort(badPerm); // decidedly bad: small rects first → more boxes
+                    std::shuffle(badPerm.begin(), badPerm.end(), std::mt19937(std::random_device{}()));
                     auto startPerm = std::make_unique<PermutationSolution>(std::move(badPerm), config.boxSize);
                     
                     PackingSolution startSol(config.boxSize);
@@ -160,7 +158,7 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
                 if (config.numRects <= 50) { // Systematic swap is very slow, only run for very small instances
                     runAlgo("LS-Systematic-Swap", [&]() {
                         std::vector<Rectangle> badPerm = rects;
-                        SmallestFirstStrategy().sort(badPerm);
+                        std::shuffle(badPerm.begin(), badPerm.end(), std::mt19937(std::random_device{}()));
                         auto startPerm = std::make_unique<PermutationSolution>(std::move(badPerm), config.boxSize);
                         LocalSearch<PermutationSolution> ls(std::move(startPerm), std::make_unique<SystematicSwapNeighborhood>());
                         auto finalPerm = ls.solve();
@@ -190,6 +188,7 @@ int main(int argc, char** argv) {
 
     std::vector<TestConfig> fullTest = {
         {5, 100, 1, 30, 1, 30, 100},
+        {3, 200, 1, 50, 1, 50, 200},
         {3, 500, 1, 50, 1, 50, 200},
         {1, 1000, 1, 100, 1, 100, 500}
     };
