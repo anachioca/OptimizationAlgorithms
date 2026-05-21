@@ -131,10 +131,12 @@ The "solution" here is a `vector<Rectangle>` — the *order* in which rectangles
 
 **Tunings applied** (this is the most performance-sensitive neighborhood — every score evaluation rebuilds the full packing):
 
-1. **Sparse-box biased source selection.** A helper `analyze()` at the top of each step does one packing pass and records, for each rectangle, which box it landed in, plus which box ended up sparsest. The permutation positions of rectangles in the sparsest box are collected as candidates. When the move's source position `i` is drawn, with probability 0.7 it comes from this candidate list; otherwise uniform. Directly implements the spec's hint: *"Rechtecke in relativ leeren Boxen anderswo in der Permutation zu platzieren."*
-2. **Mixed move set.** Swap and insert are picked 50/50 per attempt. Swap is local in permutation distance; insert is long-range. Each is good for different kinds of structural change.
-3. **Focused attempt budget.** `min(150, 40 + N/10)` attempts per step. Each attempt is biased to a position likely to improve the score, so coverage of useful moves is reasonable.
-4. **`analyze()` returns the score alongside the box assignments**, saving the redundant call that would otherwise be needed for the baseline.
+1. **Sparse-box biased source selection.** A helper `analyze()` at the top of each step does one packing pass and records, for each rectangle, which box it landed in, plus which box ended up sparsest. The permutation positions of rectangles in the sparsest box are collected as candidates. When the move's source position `i` is drawn, **with probability 0.9** it comes from this candidate list; otherwise uniform. Directly implements the spec's hint: *"Rechtecke in relativ leeren Boxen anderswo in der Permutation zu platzieren."*
+2. **Destination bias.** When the source `i` was drawn from the sparse-box candidates, the destination `j` is biased to an **earlier** position (`uniform[0, i-1]`) so the rectangle is placed before competing rectangles claim the corners. When the source is uniform, the destination is uniform too.
+3. **Mixed move set.** Swap and insert are picked 50/50 per attempt. Swap is local in permutation distance; insert can pull a rectangle a long way through the permutation without disturbing the rest.
+4. **Focused attempt budget.** `min(20, 10 + N/30)` attempts per step. Each attempt is biased to a position likely to improve the score, so a small budget covers a useful chunk of move space.
+5. **Per-run step cap.** The caller (`test_env.cpp`) bounds the outer loop at `min(20, 15 + N/30)` steps. Combined with the attempt cap, this keeps the worst-case work product `maxSteps × maxAttempts × N` inside the time budget.
+6. **`analyze()` returns the score alongside the box assignments**, saving the redundant call that would otherwise be needed for the baseline.
 
 **Systematic variant**: `SystematicSwapNeighborhood` enumerates every `(i, j)` swap with `i < j` and returns the first improvement. O(N²) evaluations per step, each rebuilding the packing — used only at very small N (≤ 50 in the test environment).
 

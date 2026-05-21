@@ -146,22 +146,34 @@ public:
             }
         }
 
-        // Lower attempt cap than before: each attempt is more focused, so we
-        // don't need 1000 random tries per step.
-        int maxAttempts = std::min(150, 40 + n / 10);
+        // Per-step attempt budget. Each attempt rebuilds the full packing, so
+        // this is the dominant cost driver per step. With strong sparse-box
+        // bias most attempts hit useful moves, so a modest budget is enough —
+        // but we keep ≥20 at small N to leave headroom for the search to find
+        // improvements when the packing has few moves available.
+        int maxAttempts = std::min(20, 10 + n / 30);
         std::uniform_int_distribution<> pos(0, n - 1);
         std::uniform_real_distribution<> uniform01(0.0, 1.0);
 
         for (int k = 0; k < maxAttempts; ++k) {
-            // Bias the source position: 70% chance to pick from the sparsest
-            // box (when one exists), else uniform.
+            // Source bias: 90% chance to pick a position from the sparsest box 
             int i;
-            if (!sparsePositions.empty() && uniform01(gen) < 0.7) {
+            bool fromSparse = !sparsePositions.empty() && uniform01(gen) < 0.9;
+            if (fromSparse) {
                 i = sparsePositions[std::uniform_int_distribution<>(0, (int)sparsePositions.size() - 1)(gen)];
             } else {
                 i = pos(gen);
             }
-            int j = pos(gen);
+
+            // Destination bias: when the source comes from a sparse box, target
+            // an EARLIER position so the rectangle gets placed before competing
+            // rectangles claim the corners. Otherwise uniform.
+            int j;
+            if (fromSparse && i > 0) {
+                j = std::uniform_int_distribution<>(0, i - 1)(gen);
+            } else {
+                j = pos(gen);
+            }
             if (i == j) continue;
 
             auto tempPerm = current.permutation;

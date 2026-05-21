@@ -134,19 +134,25 @@ void runExperiment(const std::vector<TestConfig>& configs, const std::string& lo
 
             // --- LOCAL SEARCH (PERMUTATION) ---
             // Decidedly bad start: SmallestFirst order. Deterministic and provably
-            // worse than random shuffle in this problem.
-            if (config.numRects <= 100) { // Permutation LS is very slow, only run for smaller instances
+            // worse than random shuffle in this problem. Now runs at every size
+            // including N=1000 thanks to the focused move bias and bounded step
+            // budget below.
+            if (config.numRects <= 1000){
                 runAlgo("LS-Random-Swap", [&]() {
                     std::vector<Rectangle> badPerm = rects;
                     SmallestFirstStrategy().sort(badPerm);
                     auto startPerm = std::make_unique<PermutationSolution>(std::move(badPerm), config.boxSize);
 
                     LocalSearch<PermutationSolution> ls(std::move(startPerm), std::make_unique<RandomizedSwapNeighborhood>());
-                    auto finalPerm = ls.solve();
 
-                    // Convert back to PackingSolution to get box count
+                    // Step Cap
+                    int maxSteps = std::min(5, config.numRects / 30);
+                    for (int step = 0; step < maxSteps; ++step) {
+                        if (!ls.performStep()) break;
+                    }
+
                     PackingSolution finalSol(config.boxSize);
-                    for (const auto& r : finalPerm->permutation) finalSol.placeRectangle(r);
+                    for (const auto& r : ls.getCurrentSolution().permutation) finalSol.placeRectangle(r);
                     return finalSol.boxes.size();
                 });
             }
